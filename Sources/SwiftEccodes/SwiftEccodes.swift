@@ -15,9 +15,11 @@ public enum EccodesNamespace: String {
     case mars
 }
 
+/// A GRIB file on disk
 public final class GribFile {
     let fn: UnsafeMutablePointer<FILE>
     
+    /// Iterate through all GRID messages
     public var messages: AnyIterator<GribMessage> {
         AnyIterator<GribMessage> {
             var error: Int32 = 0
@@ -28,6 +30,7 @@ public final class GribFile {
         }
     }
     
+    /// Try to open file for reading. Throws an error if the file could not be opened
     public init(file: String) throws {
         guard let fn = fopen(file, "r") else {
             let error = String(cString: strerror(errno))
@@ -37,13 +40,16 @@ public final class GribFile {
     }
 }
 
+/// A GRIB file in memory
 public struct GribMemory {
     let ptr: UnsafeRawBufferPointer
     
+    /// The pointer must be valid for the time it is used to read grib data
     public init(ptr: UnsafeRawBufferPointer) {
         self.ptr = ptr
     }
     
+    /// Iterate through all GRID messages
     public var messages: AnyIterator<GribMessage> {
         var offset = 0
         return AnyIterator<GribMessage> {
@@ -68,6 +74,7 @@ public final class GribMessage {
         self.h = h
     }
     
+    /// Read data as `Double` array
     public func getDouble() throws -> [Double] {
         var size = 0
         guard codes_get_size(h, "values", &size) == 0 else {
@@ -82,6 +89,7 @@ public final class GribMessage {
         }
     }
     
+    /// Read data as `Int` array
     public func getLong() throws -> [Int] {
         var size = 0
         guard codes_get_size(h, "values", &size) == 0 else {
@@ -96,6 +104,7 @@ public final class GribMessage {
         }
     }
     
+    /// Get a single attribute. E.g. `name`, `Ni` or `Nj`
     public func get(attribute: String) -> String? {
         var length = 0
         guard grib_get_length(h, attribute, &length) == 0 else {
@@ -110,6 +119,7 @@ public final class GribMessage {
         }
     }
     
+    /// Itterate through all attributes in a given namespace as key value string tuples
     public func iterate(namespace: EccodesNamespace) -> AnyIterator<(key: String, value: String)> {
         guard let kiter  = codes_keys_iterator_new(h, UInt(CODES_KEYS_ITERATOR_ALL_KEYS | CODES_KEYS_ITERATOR_SKIP_DUPLICATES), namespace.rawValue) else {
             fatalError()
