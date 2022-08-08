@@ -7,5 +7,14 @@ final class SwiftEccodesTests: XCTestCase {
         // Use XCTAssert and related functions to verify your tests produce the correct
         // results.
         XCTAssertEqual(SwiftEccodes().text, "Hello, World!")
+        
+        let file = try GribFile(file: "/Users/patrick/Downloads/test.grib")
+        for message in file.messages {
+            message.iterate(namespace: "ls").forEach({
+                print($0)
+            })
+            let data = message.getData()
+            print(data[0..<10])
+        }
     }
 }

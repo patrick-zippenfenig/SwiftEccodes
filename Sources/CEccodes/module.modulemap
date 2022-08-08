@@ -1,0 +1,5 @@
+module CEccodes [system] {
+  header "shim.h"
+  link "eccodes"
+  export *
+}
