@@ -34,6 +34,16 @@ public final class GribMessage {
         }
     }
     
+    public func get(attribute: String) -> String? {
+        let namebuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: 1024)
+        defer { namebuffer.deallocate() }
+        var vlen = namebuffer.count
+        guard codes_get_string(h, attribute, namebuffer.baseAddress, &vlen) == 0 else {
+            return nil
+        }
+        return String(cString: namebuffer.baseAddress!)
+    }
+    
     public func iterate(namespace: String) -> AnyIterator<(key: String, value: String)> {
         guard let kiter  = codes_keys_iterator_new(h, UInt(CODES_KEYS_ITERATOR_ALL_KEYS | CODES_KEYS_ITERATOR_SKIP_DUPLICATES), namespace) else {
             fatalError()
@@ -47,12 +57,12 @@ public final class GribMessage {
                 return nil
             }
             guard let name = codes_keys_iterator_get_name(kiter) else {
-                fatalError()
+                return nil
             }
             let key = String(cString: name)
             var vlen = namebuffer.count
             guard codes_keys_iterator_get_string(kiter, namebuffer.baseAddress, &vlen) == 0 else {
-                fatalError()
+                return nil
             }
             let value = String(cString: namebuffer.baseAddress!)
             return (key, value)

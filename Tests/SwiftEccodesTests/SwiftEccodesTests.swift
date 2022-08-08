@@ -13,6 +13,7 @@ final class SwiftEccodesTests: XCTestCase {
             message.iterate(namespace: "ls").forEach({
                 print($0)
             })
+            print(message.get(attribute: "name")!)
             let data = message.getData()
             print(data[0..<10])
         }
