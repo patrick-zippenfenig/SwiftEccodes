@@ -1,5 +1,5 @@
 import XCTest
-@testable import SwiftEccodes
+import SwiftEccodes
 
 final class SwiftEccodesTests: XCTestCase {
     func testExample() throws {

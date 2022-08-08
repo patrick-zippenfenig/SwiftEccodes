@@ -1,4 +1,4 @@
-import CEccodes
+@_implementationOnly import CEccodes
 
 public enum EccodesError: Error {
     case cannotOpenFile(filename: String, errno: Int32, error: String)
