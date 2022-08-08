@@ -9,7 +9,7 @@ final class SwiftEccodesTests: XCTestCase {
                 print($0)
             })
             print(message.get(attribute: "name")!)
-            let data = try message.getData()
+            let data = try message.getDouble()
             print(data[0..<10])
         }
     }
@@ -26,7 +26,7 @@ final class SwiftEccodesTests: XCTestCase {
                     print($0)
                 })
                 print(message.get(attribute: "name")!)
-                let data = try message.getData()
+                let data = try message.getDouble()
                 print(data.count)
                 print(data[0..<10])
             }

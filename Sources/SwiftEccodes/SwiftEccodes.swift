@@ -68,7 +68,7 @@ public final class GribMessage {
         self.h = h
     }
     
-    public func getData() throws -> [Double] {
+    public func getDouble() throws -> [Double] {
         var size = 0
         guard codes_get_size(h, "values", &size) == 0 else {
             throw EccodesError.cannotGetData
@@ -76,6 +76,20 @@ public final class GribMessage {
         
         return try [Double](unsafeUninitializedCapacity: size) { buffer, initializedCount in
             guard codes_get_double_array(h, "values", buffer.baseAddress, &size) == 0 else {
+                throw EccodesError.cannotGetData
+            }
+            initializedCount += size
+        }
+    }
+    
+    public func getLong() throws -> [Int] {
+        var size = 0
+        guard codes_get_size(h, "values", &size) == 0 else {
+            throw EccodesError.cannotGetData
+        }
+        
+        return try [Int](unsafeUninitializedCapacity: size) { buffer, initializedCount in
+            guard codes_get_long_array(h, "values", buffer.baseAddress, &size) == 0 else {
                 throw EccodesError.cannotGetData
             }
             initializedCount += size
