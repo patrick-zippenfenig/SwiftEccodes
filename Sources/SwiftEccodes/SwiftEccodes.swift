@@ -35,36 +35,42 @@ public final class GribMessage {
     }
     
     public func get(attribute: String) -> String? {
-        let namebuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: 1024)
-        defer { namebuffer.deallocate() }
-        var vlen = namebuffer.count
-        guard codes_get_string(h, attribute, namebuffer.baseAddress, &vlen) == 0 else {
+        var length = 0
+        guard grib_get_length(h, attribute, &length) == 0 else {
             return nil
         }
-        return String(cString: namebuffer.baseAddress!)
+        return String(unsafeUninitializedCapacity: length-1) { buffer in
+            guard codes_get_string(h, attribute, buffer.baseAddress, &length) == 0 else {
+                fatalError()
+            }
+            return length-1
+        }
     }
     
     public func iterate(namespace: String) -> AnyIterator<(key: String, value: String)> {
         guard let kiter  = codes_keys_iterator_new(h, UInt(CODES_KEYS_ITERATOR_ALL_KEYS | CODES_KEYS_ITERATOR_SKIP_DUPLICATES), namespace) else {
             fatalError()
         }
-        let namebuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: 1024)
 
         return AnyIterator {
             guard codes_keys_iterator_next(kiter) == 1 else {
                 codes_keys_iterator_delete(kiter)
-                namebuffer.deallocate()
                 return nil
             }
-            guard let name = codes_keys_iterator_get_name(kiter) else {
+            guard let attribute = codes_keys_iterator_get_name(kiter) else {
                 return nil
             }
-            let key = String(cString: name)
-            var vlen = namebuffer.count
-            guard codes_keys_iterator_get_string(kiter, namebuffer.baseAddress, &vlen) == 0 else {
+            let key = String(cString: attribute)
+            var length = 0
+            guard grib_get_length(self.h, attribute, &length) == 0 else {
                 return nil
             }
-            let value = String(cString: namebuffer.baseAddress!)
+            let value = String(unsafeUninitializedCapacity: length-1) { buffer in
+                guard codes_keys_iterator_get_string(kiter, buffer.baseAddress, &length) == 0 else {
+                    fatalError()
+                }
+                return length-1
+            }
             return (key, value)
         }
     }
