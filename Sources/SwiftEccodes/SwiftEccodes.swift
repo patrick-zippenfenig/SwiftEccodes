@@ -74,6 +74,32 @@ public final class GribMessage {
     }
 }
 
+
+public struct GribMemory {
+    let ptr: UnsafeRawBufferPointer
+    
+    public init(ptr: UnsafeRawBufferPointer) {
+        self.ptr = ptr
+    }
+    
+    public var messages: AnyIterator<GribMessage> {
+        var offset = 0
+        return AnyIterator<GribMessage> {
+            if offset >= ptr.count {
+                return nil
+            }
+            guard let h = codes_handle_new_from_message(nil, ptr.baseAddress?.advanced(by: offset), ptr.count) else {
+                return nil
+            }
+            var size = 0
+            codes_get_message_size(h, &size)
+            offset += size
+            return GribMessage(h: h)
+        }
+    }
+}
+
+
 public final class GribFile {
     let fn: UnsafeMutablePointer<FILE>
     
