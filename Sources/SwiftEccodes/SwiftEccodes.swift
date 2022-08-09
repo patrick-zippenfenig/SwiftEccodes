@@ -52,9 +52,22 @@ public struct GribMemory {
     /// Iterate through all GRID messages
     public var messages: AnyIterator<GribMessage> {
         var offset = 0
+        guard let baseAddress = ptr.baseAddress else {
+            fatalError()
+        }
         return AnyIterator<GribMessage> {
             if offset >= ptr.count {
                 return nil
+            }
+            /// In multi part downloads via CURL ranges, there is a multipart header first... seek to the grid message
+            for start in offset ..< ptr.count-4 {
+                if strcmp("GRIB", baseAddress.advanced(by: start)) == 0 {
+                    offset = start
+                    break
+                }
+                if start == ptr.count - 5 {
+                    return nil
+                }
             }
             guard let h = codes_handle_new_from_message(nil, ptr.baseAddress?.advanced(by: offset), ptr.count) else {
                 return nil
