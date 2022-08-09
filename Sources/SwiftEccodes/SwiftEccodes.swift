@@ -21,9 +21,11 @@ public final class GribFile {
     
     /// Iterate through all GRID messages
     public var messages: AnyIterator<GribMessage> {
-        AnyIterator<GribMessage> {
+        let c = grib_context_get_default()
+        codes_grib_multi_support_on(c)
+        return AnyIterator<GribMessage> {
             var error: Int32 = 0
-            guard let h = codes_handle_new_from_file(nil, self.fn, PRODUCT_GRIB, &error) else {
+            guard let h = codes_handle_new_from_file(c, self.fn, PRODUCT_GRIB, &error) else {
                 return nil
             }
             return GribMessage(h: h)
@@ -51,30 +53,20 @@ public struct GribMemory {
     
     /// Iterate through all GRID messages
     public var messages: AnyIterator<GribMessage> {
-        var offset = 0
         guard let baseAddress = ptr.baseAddress else {
             fatalError()
         }
+        let c = grib_context_get_default()
+        codes_grib_multi_support_on(c)
+        
+        var length = ptr.count
+        var error: Int32 = 0
+        var ptrs: [UnsafeMutableRawPointer?] = [UnsafeMutableRawPointer(mutating: baseAddress)]
+        
         return AnyIterator<GribMessage> {
-            if offset >= ptr.count {
+            guard let h = codes_grib_handle_new_from_multi_message(c, &ptrs, &length, &error) else {
                 return nil
             }
-            /// In multi part downloads via CURL ranges, there is a multipart header first... seek to the grid message
-            for start in offset ..< ptr.count-4 {
-                if strcmp("GRIB", baseAddress.advanced(by: start)) == 0 {
-                    offset = start
-                    break
-                }
-                if start == ptr.count - 5 {
-                    return nil
-                }
-            }
-            guard let h = codes_handle_new_from_message(nil, ptr.baseAddress?.advanced(by: offset), ptr.count) else {
-                return nil
-            }
-            var size = 0
-            codes_get_message_size(h, &size)
-            offset += size
             return GribMessage(h: h)
         }
     }

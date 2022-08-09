@@ -21,7 +21,7 @@ final class SwiftEccodesTests: XCTestCase {
     
     func testExample2() throws {
         // Multi part grib files are the result of using range downloads via CURL
-        let data = try Data(contentsOf: URL(fileURLWithPath: "Tests/multipart.grib"))
+        let data = try Data(contentsOf: URL(fileURLWithPath: "/Users/patrick/Downloads/multipart2.grib"))
         try data.withUnsafeBytes { ptr in
             let file = GribMemory(ptr: ptr)
             for message in file.messages {
