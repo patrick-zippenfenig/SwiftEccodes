@@ -23,11 +23,17 @@ public final class GribFile {
     /// Iterate through all GRID messages
     public var messages: AnyIterator<GribMessage> {
         let c = grib_context_get_default()
-        codes_grib_multi_support_on(c)
         return AnyIterator<GribMessage> {
             var error: Int32 = 0
+            codes_grib_multi_support_on(c)
+            defer {
+                codes_grib_multi_support_off(c)
+            }
             guard let h = codes_handle_new_from_file(c, self.fn, PRODUCT_GRIB, &error) else {
                 return nil
+            }
+            guard grib_is_defined(h, "7777") == 1 else {
+                fatalError("Invalid grib message")
             }
             return GribMessage(h: h)
         }
@@ -58,15 +64,21 @@ public struct GribMemory {
             fatalError()
         }
         let c = grib_context_get_default()
-        codes_grib_multi_support_on(c)
         
         var length = ptr.count
         var error: Int32 = 0
         var ptrs: [UnsafeMutableRawPointer?] = [UnsafeMutableRawPointer(mutating: baseAddress)]
         
         return AnyIterator<GribMessage> {
+            codes_grib_multi_support_on(c)
+            defer {
+                codes_grib_multi_support_off(c)
+            }
             guard let h = codes_grib_handle_new_from_multi_message(c, &ptrs, &length, &error) else {
                 return nil
+            }
+            guard grib_is_defined(h, "7777") == 1 else {
+                fatalError("Invalid grib message")
             }
             return GribMessage(h: h)
         }
