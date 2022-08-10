@@ -22,12 +22,15 @@ public final class GribFile {
     /// All Grib messages
     public let messages: [GribMessage]
     
+    private let fn: UnsafeMutablePointer<__sFILE>
+    
     /// Try to open file for reading. Throws an error if the file could not be opened
     public init(file: String) throws {
         guard let fn = fopen(file, "r") else {
             let error = String(cString: strerror(errno))
             throw EccodesError.cannotOpenFile(filename: file, errno: errno, error: error)
         }
+        self.fn = fn
         
         let c = grib_context_get_default()
         codes_grib_multi_support_on(c)
@@ -58,6 +61,10 @@ public final class GribFile {
             i += 1
         }
         fatalError() // not reachable
+    }
+    
+    deinit {
+        fclose(fn)
     }
 }
 
