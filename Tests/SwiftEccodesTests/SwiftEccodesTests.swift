@@ -9,6 +9,7 @@ final class SwiftEccodesTests: XCTestCase {
     
     func testExample() throws {
         let file = try GribFile(file: "Tests/test.grib")
+        XCTAssertEqual(file.messages.count, 2)
         for message in file.messages {
             message.iterate(namespace: .ls).forEach({
                 print($0)
@@ -23,7 +24,8 @@ final class SwiftEccodesTests: XCTestCase {
         // Multi part grib files are the result of using range downloads via CURL
         let data = try Data(contentsOf: URL(fileURLWithPath: "Tests/multipart.grib"))
         try data.withUnsafeBytes { ptr in
-            let file = GribMemory(ptr: ptr)
+            let file = try GribMemory(ptr: ptr)
+            XCTAssertEqual(file.messages.count, 2)
             for message in file.messages {
                 message.iterate(namespace: .ls).forEach({
                     print($0)
@@ -41,7 +43,8 @@ final class SwiftEccodesTests: XCTestCase {
     
     func testNans() throws {
         let file = try GribFile(file: "Tests/soil_moisture_with_nans.grib")
-        let message = file.messages.makeIterator().next()!
+        XCTAssertEqual(file.messages.count, 1)
+        let message = file.messages[0]
         let data = try message.getDouble()
         XCTAssertEqual(data.count, 72960)
         XCTAssertTrue(data[0].isNaN)

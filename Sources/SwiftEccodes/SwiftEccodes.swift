@@ -3,6 +3,7 @@
 public enum EccodesError: Error {
     case cannotOpenFile(filename: String, errno: Int32, error: String)
     case cannotGetData
+    case invalidGribFileTrailingMessage7777IsMissing
 }
 
 public enum EccodesNamespace: String {
@@ -18,26 +19,8 @@ public enum EccodesNamespace: String {
 
 /// A GRIB file on disk
 public final class GribFile {
-    let fn: UnsafeMutablePointer<FILE>
-    
-    /// Iterate through all GRID messages
-    public var messages: AnyIterator<GribMessage> {
-        let c = grib_context_get_default()
-        return AnyIterator<GribMessage> {
-            var error: Int32 = 0
-            codes_grib_multi_support_on(c)
-            defer {
-                codes_grib_multi_support_off(c)
-            }
-            guard let h = codes_handle_new_from_file(c, self.fn, PRODUCT_GRIB, &error) else {
-                return nil
-            }
-            guard grib_is_defined(h, "7777") == 1 else {
-                fatalError("Invalid grib message")
-            }
-            return GribMessage(h: h)
-        }
-    }
+    /// All Grib messages
+    public let messages: [GribMessage]
     
     /// Try to open file for reading. Throws an error if the file could not be opened
     public init(file: String) throws {
@@ -45,43 +28,73 @@ public final class GribFile {
             let error = String(cString: strerror(errno))
             throw EccodesError.cannotOpenFile(filename: file, errno: errno, error: error)
         }
-        self.fn = fn
+        
+        let c = grib_context_get_default()
+        codes_grib_multi_support_on(c)
+        defer {
+            codes_grib_multi_support_off(c)
+        }
+        // Try to decode GRIB messages multiple times... Somehow there are random failures...
+        var i = 0
+        while true {
+            do {
+                var messages = [GribMessage]()
+                var error: Int32 = 0
+                while true {
+                    guard let h = codes_handle_new_from_file(c, fn, PRODUCT_GRIB, &error) else {
+                        self.messages = messages
+                        return
+                    }
+                    guard grib_is_defined(h, "7777") == 1 else {
+                        throw EccodesError.invalidGribFileTrailingMessage7777IsMissing
+                    }
+                    messages.append(GribMessage(h: h))
+                }
+            } catch {
+                if i >= 2 {
+                    throw error
+                }
+            }
+            i += 1
+        }
+        fatalError() // not reachable
     }
 }
 
 /// A GRIB file in memory
 public struct GribMemory {
-    let ptr: UnsafeRawBufferPointer
+    /// All Grib messages
+    public let messages: [GribMessage]
     
     /// The pointer must be valid for the time it is used to read grib data
-    public init(ptr: UnsafeRawBufferPointer) {
-        self.ptr = ptr
-    }
-    
-    /// Iterate through all GRID messages
-    public var messages: AnyIterator<GribMessage> {
-        guard let baseAddress = ptr.baseAddress else {
-            fatalError()
+    public init(ptr: UnsafeRawBufferPointer) throws {
+        // Try to decode GRIB messages multiple times... Somehow there are random failures...
+        var i = 0
+        while true {
+            do {
+                let c = grib_context_get_default()
+                var messages = [GribMessage]()
+                var length = ptr.count
+                var error: Int32 = 0
+                var ptrs: [UnsafeMutableRawPointer?] = [UnsafeMutableRawPointer(mutating: ptr.baseAddress)]
+                while true {
+                    guard let h = codes_grib_handle_new_from_multi_message(c, &ptrs, &length, &error) else {
+                        self.messages = messages
+                        return
+                    }
+                    guard grib_is_defined(h, "7777") == 1 else {
+                        throw EccodesError.invalidGribFileTrailingMessage7777IsMissing
+                    }
+                    messages.append(GribMessage(h: h))
+                }
+            } catch {
+                if i >= 2 {
+                    throw error
+                }
+            }
+            i += 1
         }
-        let c = grib_context_get_default()
-        
-        var length = ptr.count
-        var error: Int32 = 0
-        var ptrs: [UnsafeMutableRawPointer?] = [UnsafeMutableRawPointer(mutating: baseAddress)]
-        
-        return AnyIterator<GribMessage> {
-            codes_grib_multi_support_on(c)
-            defer {
-                codes_grib_multi_support_off(c)
-            }
-            guard let h = codes_grib_handle_new_from_multi_message(c, &ptrs, &length, &error) else {
-                return nil
-            }
-            guard grib_is_defined(h, "7777") == 1 else {
-                fatalError("Invalid grib message")
-            }
-            return GribMessage(h: h)
-        }
+        fatalError() // not reachable
     }
 }
 
