@@ -13,6 +13,7 @@ public enum EccodesNamespace: String {
     case geography
     case vertial
     case mars
+    case all = ""
 }
 
 /// A GRIB file on disk
@@ -86,8 +87,37 @@ public final class GribMessage {
             throw EccodesError.cannotGetData
         }
         
-        return try [Double](unsafeUninitializedCapacity: size) { buffer, initializedCount in
+        var data = try [Double](unsafeUninitializedCapacity: size) { buffer, initializedCount in
             guard codes_get_double_array(h, "values", buffer.baseAddress, &size) == 0 else {
+                throw EccodesError.cannotGetData
+            }
+            initializedCount += size
+        }
+        
+        /// Filter NaNs
+        guard let bitmap = try getBitmap() else {
+            return data
+        }
+        for i in data.indices {
+            if bitmap[i] == 0 {
+                data[i] = .nan
+            }
+        }
+        return data
+    }
+    
+    /// Get bitmap for information if a value is set
+    public func getBitmap() throws -> [Int]? {
+        var bitmapPresent = 0
+        guard codes_get_long(h, "bitmapPresent", &bitmapPresent) == 0, bitmapPresent == 1 else {
+            return nil
+        }
+        var size = 0
+        guard codes_get_size(h, "bitmap", &size) == 0 else {
+            fatalError("Could not get bitmap length")
+        }
+        return try [Int](unsafeUninitializedCapacity: size) { buffer, initializedCount in
+            guard codes_get_long_array(h, "bitmap", buffer.baseAddress, &size) == 0 else {
                 throw EccodesError.cannotGetData
             }
             initializedCount += size

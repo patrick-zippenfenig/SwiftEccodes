@@ -21,7 +21,7 @@ final class SwiftEccodesTests: XCTestCase {
     
     func testExample2() throws {
         // Multi part grib files are the result of using range downloads via CURL
-        let data = try Data(contentsOf: URL(fileURLWithPath: "/Users/patrick/Downloads/multipart2.grib"))
+        let data = try Data(contentsOf: URL(fileURLWithPath: "Tests/multipart.grib"))
         try data.withUnsafeBytes { ptr in
             let file = GribMemory(ptr: ptr)
             for message in file.messages {
@@ -37,5 +37,14 @@ final class SwiftEccodesTests: XCTestCase {
                 print(data[0..<10])
             }
         }
+    }
+    
+    func testNans() throws {
+        let file = try GribFile(file: "Tests/soil_moisture_with_nans.grib")
+        let message = file.messages.makeIterator().next()!
+        let data = try message.getDouble()
+        XCTAssertEqual(data.count, 72960)
+        XCTAssertTrue(data[0].isNaN)
+        XCTAssertFalse(data[2984].isNaN)
     }
 }
