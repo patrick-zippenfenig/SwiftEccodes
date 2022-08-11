@@ -1,5 +1,12 @@
 @_implementationOnly import CEccodes
 
+#if os(Linux) || os(FreeBSD)
+    import Glibc
+#else
+    import Darwin
+#endif
+
+
 public enum EccodesError: Error {
     case cannotOpenFile(filename: String, errno: Int32, error: String)
     case cannotGetData
@@ -22,7 +29,7 @@ public final class GribFile {
     /// All Grib messages
     public let messages: [GribMessage]
     
-    private let fn: UnsafeMutablePointer<__sFILE>
+    private let fn: UnsafeMutablePointer<FILE>
     
     /// Try to open file for reading. Throws an error if the file could not be opened
     public init(file: String) throws {
