@@ -19,7 +19,7 @@ let package = Package(
     targets: [
         // Targets are the basic building blocks of a package. A target can define a module or a test suite.
         // Targets can depend on other targets in this package, and on products in packages this package depends on.
-        .systemLibrary(name: "CEccodes", pkgConfig: "eccodes", providers: [.brew(["eccodes"]), .apt(["eccodes-dev"])]),
+        .systemLibrary(name: "CEccodes", pkgConfig: "eccodes", providers: [.brew(["eccodes"]), .apt(["libeccodes-dev"])]),
         .target(
             name: "SwiftEccodes",
             dependencies: ["CEccodes"]),
