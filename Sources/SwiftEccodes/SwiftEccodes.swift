@@ -82,6 +82,12 @@ public struct GribMemory {
     
     /// The pointer must be valid for the time it is used to read grib data
     public init(ptr: UnsafeRawBufferPointer) throws {
+        let c = grib_context_get_default()
+        codes_grib_multi_support_on(c)
+        defer {
+            codes_grib_multi_support_off(c)
+        }
+        
         // Try to decode GRIB messages multiple times... Somehow there are random failures...
         var i = 0
         while true {
