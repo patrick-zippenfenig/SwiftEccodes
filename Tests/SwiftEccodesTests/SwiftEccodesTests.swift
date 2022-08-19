@@ -50,4 +50,13 @@ final class SwiftEccodesTests: XCTestCase {
         XCTAssertTrue(data[0].isNaN)
         XCTAssertFalse(data[2984].isNaN)
     }
+    
+    func testIterateCoordinates() throws {
+        let file = try GribFile(file: "Tests/test.grib")
+        let message = file.messages[0]
+        let lons = try message.iterateCoordinatesAndValues().map { $0.longitude }
+        let lats = try message.iterateCoordinatesAndValues().map { $0.latitude }
+        XCTAssertEqual(lons[0..<10], [0.0, 0.9374986945169713, 1.8749973890339426, 2.812496083550914, 3.7499947780678853, 4.6874934725848565, 5.624992167101828, 6.5624908616188, 7.4999895561357715, 8.437488250652743])
+        XCTAssertEqual(lats[0..<10], [89.27671287810583, 89.27671287810583, 89.27671287810583, 89.27671287810583, 89.27671287810583, 89.27671287810583, 89.27671287810583, 89.27671287810583, 89.27671287810583, 89.27671287810583])
+    }
 }

@@ -125,6 +125,31 @@ public final class GribMessage {
         self.h = h
     }
     
+    /// Iterate over all grid-cells and return coordinate and value
+    public func iterateCoordinatesAndValues() throws -> AnyIterator<(latitude: Double, longitude: Double, value: Double)> {
+        var error: Int32 = 0
+        let iterator = codes_grib_iterator_new(h, 0, &error)
+        guard error == CODES_SUCCESS else {
+            fatalError("codes_grib_iterator_new failed")
+        }
+        let bitmap = try getBitmap()
+        var lat: Double = .nan
+        var lon: Double = .nan
+        var value: Double = .nan
+        var i = 0
+        return AnyIterator {
+            guard (codes_grib_iterator_next(iterator, &lat, &lon, &value) != 0) else {
+                codes_grib_iterator_delete(iterator)
+                return nil
+            }
+            if let bitmap = bitmap, bitmap[i] == 0 {
+                value = .nan
+            }
+            i += 1
+            return (lat,lon,value)
+        }
+    }
+    
     /// Read data as `Double` array
     public func getDouble() throws -> [Double] {
         var size = 0
