@@ -11,6 +11,8 @@ public enum EccodesError: Error {
     case cannotOpenFile(filename: String, errno: Int32, error: String)
     case cannotGetData
     case invalidGribFileTrailingMessage7777IsMissing
+    case newFromMultiMessageFailed(error: Int32)
+    case newFromFileFailed(error: Int32)
 }
 
 public enum EccodesNamespace: String {
@@ -39,29 +41,34 @@ public final class GribFile {
         }
         self.fn = fn
         
-        let c = grib_context_get_default()
-        codes_grib_multi_support_on(c)
-        defer {
-            codes_grib_multi_support_off(c)
-        }
         // Try to decode GRIB messages multiple times... Somehow there are random failures...
         var i = 0
         while true {
             do {
+                let c = grib_context_get_default()
+                codes_grib_multi_support_on(c)
+                defer {
+                    codes_grib_multi_support_off(c)
+                }
                 var messages = [GribMessage]()
                 var error: Int32 = 0
                 while true {
                     guard let h = codes_handle_new_from_file(c, fn, PRODUCT_GRIB, &error) else {
+                        guard error == 0 else {
+                            throw EccodesError.newFromFileFailed(error: error)
+                        }
                         self.messages = messages
                         return
                     }
+                    let message = GribMessage(h: h)
                     guard grib_is_defined(h, "7777") == 1 else {
                         throw EccodesError.invalidGribFileTrailingMessage7777IsMissing
                     }
-                    messages.append(GribMessage(h: h))
+                    messages.append(message)
                 }
             } catch {
                 if i >= 2 {
+                    fclose(fn)
                     throw error
                 }
             }
@@ -82,30 +89,32 @@ public struct GribMemory {
     
     /// The pointer must be valid for the time it is used to read grib data
     public init(ptr: UnsafeRawBufferPointer) throws {
-        let c = grib_context_get_default()
-        codes_grib_multi_support_on(c)
-        defer {
-            codes_grib_multi_support_off(c)
-        }
-        
         // Try to decode GRIB messages multiple times... Somehow there are random failures...
         var i = 0
         while true {
             do {
                 let c = grib_context_get_default()
+                codes_grib_multi_support_on(c)
+                defer {
+                    codes_grib_multi_support_off(c)
+                }
                 var messages = [GribMessage]()
                 var length = ptr.count
                 var error: Int32 = 0
                 var ptrs: [UnsafeMutableRawPointer?] = [UnsafeMutableRawPointer(mutating: ptr.baseAddress)]
                 while true {
                     guard let h = codes_grib_handle_new_from_multi_message(c, &ptrs, &length, &error) else {
+                        guard error == 0 else {
+                            throw EccodesError.newFromMultiMessageFailed(error: error)
+                        }
                         self.messages = messages
                         return
                     }
+                    let message = GribMessage(h: h)
                     guard grib_is_defined(h, "7777") == 1 else {
                         throw EccodesError.invalidGribFileTrailingMessage7777IsMissing
                     }
-                    messages.append(GribMessage(h: h))
+                    messages.append(message)
                 }
             } catch {
                 if i >= 2 {
