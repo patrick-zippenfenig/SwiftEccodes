@@ -101,7 +101,7 @@ public struct GribMemory {
                 var messages = [GribMessage]()
                 var length = ptr.count
                 var error: Int32 = 0
-                var ptrs: [UnsafeMutableRawPointer?] = [UnsafeMutableRawPointer(mutating: ptr.baseAddress)]
+                var ptrs = UnsafeMutableRawPointer(mutating: ptr.baseAddress)
                 while true {
                     guard let h = codes_grib_handle_new_from_multi_message(c, &ptrs, &length, &error) else {
                         guard error == 0 else {
