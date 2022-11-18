@@ -84,7 +84,7 @@ public struct SwiftEccodes {
     
     /// Iterate message from memory. Memory must not be freed until all messages have been consumed.
     /// The message will be copied as soon as a modification is needed. In practice, memory copy is very likely.
-    static func iterateMessages(memory: UnsafeRawBufferPointer, multiSupport: Bool = true, callback: (GribMessage) throws -> ()) throws {
+    public static func iterateMessages(memory: UnsafeRawBufferPointer, multiSupport: Bool = true, callback: (GribMessage) throws -> ()) throws {
         let c = grib_context_get_default()
         if multiSupport {
             codes_grib_multi_support_on(c)
