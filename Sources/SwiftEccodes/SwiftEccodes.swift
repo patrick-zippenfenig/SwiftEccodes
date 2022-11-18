@@ -1,14 +1,9 @@
 @_implementationOnly import CEccodes
-
-#if os(Linux) || os(FreeBSD)
-    import Glibc
-#else
-    import Darwin
-#endif
+import Foundation
 
 
 public enum EccodesError: Error {
-    case cannotOpenFile(filename: String, errno: Int32, error: String)
+    case cannotOpenFile(filename: String)
     case cannotGetData
     case invalidGribFileTrailingMessage7777IsMissing
     case newFromMultiMessageFailed(error: Int32)
@@ -26,111 +21,102 @@ public enum EccodesNamespace: String {
     case all = ""
 }
 
-/// A GRIB file on disk
-public final class GribFile {
-    /// All Grib messages
-    public let messages: [GribMessage]
-    
-    private let fn: UnsafeMutablePointer<FILE>
-    
-    /// Try to open file for reading. Throws an error if the file could not be opened
-    public init(file: String) throws {
-        guard let fn = fopen(file, "r") else {
-            let error = String(cString: strerror(errno))
-            throw EccodesError.cannotOpenFile(filename: file, errno: errno, error: error)
+/// Contains function to read grib messages
+public struct SwiftEccodes {
+    /// Open a file and return all messages. Load the entire file into memory.
+    public static func getMessages(fileName: String, multiSupport: Bool) throws -> [GribMessage] {
+        var messages = [GribMessage]()
+        try iterateMessages(fileName: fileName, multiSupport: multiSupport) {
+            messages.append($0)
         }
-        self.fn = fn
+        return messages
+    }
+    
+    /// Return all messages. Load the entire file into memory.
+    public static func getMessages(fileHandle: FileHandle, multiSupport: Bool) throws -> [GribMessage] {
+        var messages = [GribMessage]()
+        try iterateMessages(fileHandle: fileHandle, multiSupport: multiSupport) {
+            messages.append($0)
+        }
+        return messages
+    }
+    
+    /// Read all messages from memory. Memory must not be freed until all messages have been consumed.
+    /// The message will be copied as soon as a modification is needed. In practice, memory copy is very likely.
+    public static func getMessages(memory: UnsafeRawBufferPointer, multiSupport: Bool) throws -> [GribMessage] {
+        var messages = [GribMessage]()
+        try iterateMessages(memory: memory, multiSupport: multiSupport) {
+            messages.append($0)
+        }
+        return messages
+    }
+    
+    /// Open a file and iterate all messages. All messages copy the required data into memory and the file does not need to stay open.
+    public static func iterateMessages(fileName: String, multiSupport: Bool, callback: (GribMessage) throws -> ()) throws {
+        guard let filehandle = FileHandle(forReadingAtPath: fileName) else {
+            throw EccodesError.cannotOpenFile(filename: fileName)
+        }
+        try iterateMessages(fileHandle: filehandle, multiSupport: multiSupport, callback: callback)
+    }
+    
+    /// Itterate all message from a given `FileHandle`. All messages copy the required data into memory and the file does not need to stay open.
+    public static func iterateMessages(fileHandle: FileHandle, multiSupport: Bool, callback: (GribMessage) throws -> ()) throws {
+        let c = grib_context_get_default()
+        if multiSupport {
+            codes_grib_multi_support_on(c)
+        } else {
+            codes_grib_multi_support_off(c)
+        }
         
-        // Try to decode GRIB messages multiple times... Somehow there are random failures...
-        var i = 0
+        let fn = fdopen(fileHandle.fileDescriptor, "r")
+        
         while true {
-            do {
-                let c = grib_context_get_default()
-                codes_grib_multi_support_on(c)
-                defer {
-                    codes_grib_multi_support_off(c)
+            var error: Int32 = 0
+            guard let h = codes_handle_new_from_file(c, fn, PRODUCT_GRIB, &error) else {
+                guard error == 0 else {
+                    throw EccodesError.newFromFileFailed(error: error)
                 }
-                var messages = [GribMessage]()
-                var error: Int32 = 0
-                while true {
-                    guard let h = codes_handle_new_from_file(c, fn, PRODUCT_GRIB, &error) else {
-                        guard error == 0 else {
-                            throw EccodesError.newFromFileFailed(error: error)
-                        }
-                        self.messages = messages
-                        return
-                    }
-                    let message = GribMessage(h: h)
-                    guard grib_is_defined(h, "7777") == 1 else {
-                        throw EccodesError.invalidGribFileTrailingMessage7777IsMissing
-                    }
-                    messages.append(message)
-                }
-            } catch {
-                if i >= 2 {
-                    fclose(fn)
-                    throw error
-                }
+                return
             }
-            i += 1
+            try callback(try GribMessage(h: h))
         }
-        fatalError() // not reachable
     }
     
-    deinit {
-        fclose(fn)
+    /// Iterate message from memory. Memory must not be freed until all messages have been consumed.
+    /// The message will be copied as soon as a modification is needed. In practice, memory copy is very likely.
+    static func iterateMessages(memory: UnsafeRawBufferPointer, multiSupport: Bool = true, callback: (GribMessage) throws -> ()) throws {
+        let c = grib_context_get_default()
+        if multiSupport {
+            codes_grib_multi_support_on(c)
+        } else {
+            codes_grib_multi_support_off(c)
+        }
+        
+        var length = memory.count
+        var ptrs = UnsafeMutableRawPointer(mutating: memory.baseAddress)
+        while true {
+            var error: Int32 = 0
+            guard let h = codes_grib_handle_new_from_multi_message(c, &ptrs, &length, &error) else {
+                guard error == 0 else {
+                    throw EccodesError.newFromMultiMessageFailed(error: error)
+                }
+                return
+            }
+            try callback(try GribMessage(h: h))
+        }
     }
 }
 
-/// A GRIB file in memory
-public struct GribMemory {
-    /// All Grib messages
-    public let messages: [GribMessage]
-    
-    /// The pointer must be valid for the time it is used to read grib data
-    public init(ptr: UnsafeRawBufferPointer) throws {
-        // Try to decode GRIB messages multiple times... Somehow there are random failures...
-        var i = 0
-        while true {
-            do {
-                let c = grib_context_get_default()
-                codes_grib_multi_support_on(c)
-                defer {
-                    codes_grib_multi_support_off(c)
-                }
-                var messages = [GribMessage]()
-                var length = ptr.count
-                var error: Int32 = 0
-                var ptrs = UnsafeMutableRawPointer(mutating: ptr.baseAddress)
-                while true {
-                    guard let h = codes_grib_handle_new_from_multi_message(c, &ptrs, &length, &error) else {
-                        guard error == 0 else {
-                            throw EccodesError.newFromMultiMessageFailed(error: error)
-                        }
-                        self.messages = messages
-                        return
-                    }
-                    let message = GribMessage(h: h)
-                    guard grib_is_defined(h, "7777") == 1 else {
-                        throw EccodesError.invalidGribFileTrailingMessage7777IsMissing
-                    }
-                    messages.append(message)
-                }
-            } catch {
-                if i >= 2 {
-                    throw error
-                }
-            }
-            i += 1
-        }
-        fatalError() // not reachable
-    }
-}
-
+/// Represent a GRIB message. Frees memory at release.
 public final class GribMessage {
     let h: OpaquePointer
     
-    public init(h: OpaquePointer) {
+    init(h: OpaquePointer) throws {
+        guard grib_is_defined(h, "7777") == 1 else {
+            codes_handle_delete(h)
+            throw EccodesError.invalidGribFileTrailingMessage7777IsMissing
+        }
+        
         self.h = h
     }
     

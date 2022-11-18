@@ -8,9 +8,9 @@ final class SwiftEccodesTests: XCTestCase {
     }
     
     func testExample() throws {
-        let file = try GribFile(file: "Tests/test.grib")
-        XCTAssertEqual(file.messages.count, 2)
-        for message in file.messages {
+        let messages = try SwiftEccodes.getMessages(fileName: "Tests/test.grib", multiSupport: true)
+        XCTAssertEqual(messages.count, 2)
+        for message in messages {
             message.iterate(namespace: .ls).forEach({
                 print($0)
             })
@@ -24,9 +24,9 @@ final class SwiftEccodesTests: XCTestCase {
         // Multi part grib files are the result of using range downloads via CURL
         let data = try Data(contentsOf: URL(fileURLWithPath: "Tests/multipart.grib"))
         try data.withUnsafeBytes { ptr in
-            let file = try GribMemory(ptr: ptr)
-            XCTAssertEqual(file.messages.count, 2)
-            for message in file.messages {
+            let messages = try SwiftEccodes.getMessages(memory: ptr, multiSupport: true)
+            XCTAssertEqual(messages.count, 2)
+            for message in messages {
                 message.iterate(namespace: .ls).forEach({
                     print($0)
                 })
@@ -42,9 +42,9 @@ final class SwiftEccodesTests: XCTestCase {
     }
     
     func testNans() throws {
-        let file = try GribFile(file: "Tests/soil_moisture_with_nans.grib")
-        XCTAssertEqual(file.messages.count, 1)
-        let message = file.messages[0]
+        let messages = try SwiftEccodes.getMessages(fileName: "Tests/soil_moisture_with_nans.grib", multiSupport: true)
+        XCTAssertEqual(messages.count, 1)
+        let message = messages[0]
         let data = try message.getDouble()
         XCTAssertEqual(data.count, 72960)
         XCTAssertTrue(data[0].isNaN)
@@ -52,8 +52,8 @@ final class SwiftEccodesTests: XCTestCase {
     }
     
     func testIterateCoordinates() throws {
-        let file = try GribFile(file: "Tests/test.grib")
-        let message = file.messages[0]
+        let messages = try SwiftEccodes.getMessages(fileName: "Tests/test.grib", multiSupport: true)
+        let message = messages[0]
         let lons = try message.iterateCoordinatesAndValues().map { $0.longitude }
         let lats = try message.iterateCoordinatesAndValues().map { $0.latitude }
         XCTAssertEqual(lons[0..<10], [0.0, 0.9374986945169713, 1.8749973890339426, 2.812496083550914, 3.7499947780678853, 4.6874934725848565, 5.624992167101828, 6.5624908616188, 7.4999895561357715, 8.437488250652743])

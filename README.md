@@ -25,8 +25,8 @@ Read GRIB messages and data from files:
 ```swift
 import SwiftEccodes
 
-let file = try GribFile(file: "/Users/patrick/Downloads/test.grib")
-for message in file.messages {
+let messages = try SwiftEccodes.getMessages(fileName: "test.grib", multiSupport: true)
+for message in messages {
     message.iterate(namespace: .ls).forEach({
         print($0)
     })
@@ -41,10 +41,10 @@ Or read directly from memory:
 ```swift
 import SwiftEccodes
 
-let data = try Data(contentsOf: URL(fileURLWithPath: "/Users/patrick/Downloads/test.grib"))
+let data = try Data(contentsOf: URL(fileURLWithPath: "test.grib"))
 try data.withUnsafeBytes { ptr in
-    let file = GribMemory(ptr: ptr)
-    for message in file.messages {
+    let messages = try SwiftEccodes.getMessages(memory: ptr, multiSupport: true)
+    for message in messages {
         message.iterate(namespace: .ls).forEach({
             print($0)
         })
