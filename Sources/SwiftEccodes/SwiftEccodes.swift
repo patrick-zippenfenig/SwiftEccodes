@@ -1,5 +1,11 @@
 @_implementationOnly import CEccodes
+
 import Foundation
+#if os(Linux)
+    import Glibc
+#else
+    import Darwin
+#endif
 
 
 public enum EccodesError: Error {
@@ -106,7 +112,8 @@ public struct SwiftEccodes {
         }
     }
     
-    /// Detect a range of bytes in a byte stream that most likely is a grib message
+    /// Detect a range of bytes in a byte stream if there is a grib header and returns it
+    /// Note: The required length to decode a GRIB message is not checked of the input buffer
     public static func seekGrib(memory: UnsafeRawBufferPointer) -> (offset: Int, length: Int)? {
         let search = "GRIB"
         guard let base = memory.baseAddress else {
@@ -141,8 +148,7 @@ public struct SwiftEccodes {
         let length = header.pointee.length.bigEndian
         guard header.pointee.zero == 0,
               (1...2).contains(header.pointee.version),
-              length <= (1 << 40),
-              offset + Int(length) <= memory.count else {
+              length <= (1 << 40) else {
             return nil
         }
         return (offset, Int(length))
