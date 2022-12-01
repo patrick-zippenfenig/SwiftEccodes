@@ -1,11 +1,5 @@
 @_implementationOnly import CEccodes
-
 import Foundation
-#if os(Linux)
-    import Glibc
-#else
-    import Darwin
-#endif
 
 
 public enum EccodesError: Error {
@@ -119,10 +113,9 @@ public struct SwiftEccodes {
         guard let base = memory.baseAddress else {
             return nil
         }
-        guard let start = memmem(base, memory.count, search, search.count) else {
+        guard let offset = search.withCString({memory.firstRange(of: UnsafeRawBufferPointer(start: $0, count: strlen($0)))})?.lowerBound else {
             return nil
         }
-        let offset = base.distance(to: start)
         guard offset <= (1 << 40),
               offset + MemoryLayout<GribHeader>.size <= memory.count else {
             return nil
@@ -144,7 +137,7 @@ public struct SwiftEccodes {
             let length: UInt64
         }
         
-        let header = start.assumingMemoryBound(to: GribHeader.self)
+        let header = base.advanced(by: offset).assumingMemoryBound(to: GribHeader.self)
         let length = header.pointee.length.bigEndian
         guard header.pointee.zero == 0,
               (1...2).contains(header.pointee.version),
