@@ -105,6 +105,48 @@ public struct SwiftEccodes {
             try callback(try GribMessage(h: h))
         }
     }
+    
+    /// Detect a range of bytes in a byte stream that most likely is a grib message
+    public static func seekGrib(memory: UnsafeRawBufferPointer) -> (offset: Int, length: Int)? {
+        let search = "GRIB"
+        guard let base = memory.baseAddress else {
+            return nil
+        }
+        guard let start = memmem(base, memory.count, search, search.count) else {
+            return nil
+        }
+        let offset = base.distance(to: start)
+        guard offset <= (1 << 40),
+              offset + MemoryLayout<GribHeader>.size <= memory.count else {
+            return nil
+        }
+        struct GribHeader {
+            /// "GRIB"
+            let magic: UInt32
+            
+            /// Should be zero
+            let zero: UInt16
+            
+            /// 0 - for Meteorological Products, 2 for Land Surface Products, 10 - for Oceanographic Products
+            let type: UInt8
+            
+            /// Version 1 and 2 supported
+            let version: UInt8
+            
+            /// Endian needs to be swapped
+            let length: UInt64
+        }
+        
+        let header = start.assumingMemoryBound(to: GribHeader.self)
+        let length = header.pointee.length.bigEndian
+        guard header.pointee.zero == 0,
+              (1...2).contains(header.pointee.version),
+              length <= (1 << 40),
+              offset + Int(length) <= memory.count else {
+            return nil
+        }
+        return (offset, Int(length))
+    }
 }
 
 /// Represent a GRIB message. Frees memory at release.

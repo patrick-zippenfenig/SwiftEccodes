@@ -41,6 +41,26 @@ final class SwiftEccodesTests: XCTestCase {
         }
     }
     
+    func testSeek() throws {
+        let data = try Data(contentsOf: URL(fileURLWithPath: "Tests/multipart.grib"))
+        var totalMessages = 0
+        try data.withUnsafeBytes({
+            var start = $0
+            while let seek = SwiftEccodes.seekGrib(memory: start) {
+                print(seek)
+                let memory = UnsafeRawBufferPointer(rebasing: start[seek.offset ..< seek.offset+seek.length])
+                let messages = try SwiftEccodes.getMessages(memory: memory, multiSupport: true)
+                totalMessages += messages.count
+                print(messages.count)
+                for message in messages {
+                    print(message.get(attribute: "name")!)
+                }
+                start = UnsafeRawBufferPointer(rebasing: start[(seek.offset + seek.length)...])
+            }
+        })
+        XCTAssertEqual(totalMessages, 2)
+    }
+    
     func testNans() throws {
         let messages = try SwiftEccodes.getMessages(fileName: "Tests/soil_moisture_with_nans.grib", multiSupport: true)
         XCTAssertEqual(messages.count, 1)
