@@ -299,8 +299,11 @@ public final class GribMessage {
             guard codes_get_string(h, attribute, buffer.baseAddress, &length) == 0 else {
                 fatalError()
             }
-            // ignore \0
-            return length-1
+            if buffer[length-1] == 0 {
+                // ignore zero terminator
+                return length-1
+            }
+            return length
         }
     }
     
@@ -330,8 +333,11 @@ public final class GribMessage {
                 guard codes_keys_iterator_get_string(kiter, buffer.baseAddress, &length) == 0 else {
                     fatalError()
                 }
-                // ignore \0
-                return length-1
+                if buffer[length-1] == 0 {
+                    // ignore zero terminator
+                    return length-1
+                }
+                return length
             }
             return (key, value)
         }
