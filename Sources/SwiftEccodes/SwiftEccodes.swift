@@ -23,6 +23,9 @@ public enum EccodesNamespace: String {
 
 /// Contains function to read grib messages
 public struct SwiftEccodes {
+    /// Eccodes grib context might not be thread safe.
+    private static let gribContextLock = Lock()
+    
     /// Open a file and return all messages. Load the entire file into memory.
     public static func getMessages(fileName: String, multiSupport: Bool) throws -> [GribMessage] {
         var messages = [GribMessage]()
@@ -61,18 +64,21 @@ public struct SwiftEccodes {
     
     /// Itterate all message from a given `FileHandle`. All messages copy the required data into memory and the file does not need to stay open.
     public static func iterateMessages(fileHandle: FileHandle, multiSupport: Bool, callback: (GribMessage) throws -> ()) throws {
-        let c = grib_context_get_default()
-        if multiSupport {
-            codes_grib_multi_support_on(c)
-        } else {
-            codes_grib_multi_support_off(c)
+        let c = gribContextLock.withLock {
+            let c = grib_context_get_default()
+            if multiSupport {
+                codes_grib_multi_support_on(c)
+            } else {
+                codes_grib_multi_support_off(c)
+            }
+            return c
         }
         
         let fn = fdopen(fileHandle.fileDescriptor, "r")
         
         while true {
             var error: Int32 = 0
-            guard let h = codes_handle_new_from_file(c, fn, PRODUCT_GRIB, &error) else {
+            guard let h = gribContextLock.withLock({ codes_handle_new_from_file(c, fn, PRODUCT_GRIB, &error) }) else {
                 guard error == 0 else {
                     throw EccodesError.newFromFileFailed(error: error)
                 }
@@ -85,18 +91,21 @@ public struct SwiftEccodes {
     /// Iterate message from memory. Memory must not be freed until all messages have been consumed.
     /// The message will be copied as soon as a modification is needed. In practice, memory copy is very likely.
     public static func iterateMessages(memory: UnsafeRawBufferPointer, multiSupport: Bool = true, callback: (GribMessage) throws -> ()) throws {
-        let c = grib_context_get_default()
-        if multiSupport {
-            codes_grib_multi_support_on(c)
-        } else {
-            codes_grib_multi_support_off(c)
+        let c = gribContextLock.withLock {
+            let c = grib_context_get_default()
+            if multiSupport {
+                codes_grib_multi_support_on(c)
+            } else {
+                codes_grib_multi_support_off(c)
+            }
+            return c
         }
         
         var length = memory.count
         var ptrs = UnsafeMutableRawPointer(mutating: memory.baseAddress)
         while true {
             var error: Int32 = 0
-            guard let h = codes_grib_handle_new_from_multi_message(c, &ptrs, &length, &error) else {
+            guard let h = gribContextLock.withLock({ codes_grib_handle_new_from_multi_message(c, &ptrs, &length, &error) }) else {
                 guard error == 0 else {
                     throw EccodesError.newFromMultiMessageFailed(error: error)
                 }
