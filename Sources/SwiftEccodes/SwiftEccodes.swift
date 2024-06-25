@@ -316,6 +316,15 @@ public final class GribMessage {
         }
     }
     
+    /// Get a single attribute as integer, E.g. `message.getLong(attribute: "parameterNumber")` return 192
+    public func getLong(attribute: String) -> Int? {
+        var value = Int(0)
+        guard codes_get_long(h, attribute, &value) == 0 else {
+            fatalError()
+        }
+        return value
+    }
+    
     /// Itterate through all attributes in a given namespace as key value string tuples
     public func iterate(namespace: EccodesNamespace) -> AnyIterator<(key: String, value: String)> {
         guard let kiter  = codes_keys_iterator_new(h, UInt(CODES_KEYS_ITERATOR_ALL_KEYS | CODES_KEYS_ITERATOR_SKIP_DUPLICATES), namespace.rawValue) else {

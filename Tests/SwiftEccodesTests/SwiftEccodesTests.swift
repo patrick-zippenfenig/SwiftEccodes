@@ -69,6 +69,10 @@ final class SwiftEccodesTests: XCTestCase {
         XCTAssertEqual(data.count, 72960)
         XCTAssertTrue(data[0].isNaN)
         XCTAssertFalse(data[2984].isNaN)
+        
+        XCTAssertEqual(message.get(attribute: "shortName"), "soilw")
+        XCTAssertEqual(message.getLong(attribute: "parameterCategory"), 0)
+        XCTAssertEqual(message.getLong(attribute: "parameterNumber"), 192)
     }
     
     func testIterateCoordinates() throws {
