@@ -320,7 +320,7 @@ public final class GribMessage {
     public func getLong(attribute: String) -> Int? {
         var value = Int(0)
         guard codes_get_long(h, attribute, &value) == 0 else {
-            fatalError()
+            return nil
         }
         return value
     }
