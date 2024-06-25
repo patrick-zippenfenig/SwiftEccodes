@@ -2,7 +2,6 @@
 
 A *very* basic library to read GRIB files in Swift. This library is a wrapper for [eccodes](https://github.com/ecmwf/eccodes).
 
-WARNING: No stable interface declared yet
 
 ## Usage
 Install eccodes via `brew install eccodes` or `apt install libeccodes-dev`
