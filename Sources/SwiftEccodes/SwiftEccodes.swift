@@ -197,14 +197,10 @@ public final class GribMessage {
     
     /// Load Bitmap into an existing array. If the bitmap value is 0. NaN should be assumed for this location
     public func loadBitmap(into: inout [Int]) throws -> Bool {
-        var bitmapPresent = 0
-        guard codes_get_long(h, "bitmapPresent", &bitmapPresent) == 0, bitmapPresent == 1 else {
+        guard let bitmapPresent = getLong(attribute: "bitmapPresent"), bitmapPresent == 1 else {
             return false
         }
-        var size = 0
-        guard codes_get_size(h, "bitmap", &size) == 0 else {
-            fatalError("Could not get bitmap length")
-        }
+        var size = try getSize(of: "bitmap")
         // shrink if required
         let _ = into.dropLast(max(0, into.count - size))
         // grow if required
@@ -221,10 +217,7 @@ public final class GribMessage {
     
     /// Load values into an existing double array. NaN are  not checked from the bitmap
     public func loadDoubleNotNaNChecked(into: inout [Double]) throws {
-        var size = 0
-        guard codes_get_size(h, "values", &size) == 0 else {
-            throw EccodesError.cannotGetData
-        }
+        var size = try getSize(of: "values")
         
         // shrink if required
         let _ = into.dropLast(max(0, into.count - size))
@@ -241,10 +234,7 @@ public final class GribMessage {
     
     /// Read data as `Double` array
     public func getDouble() throws -> [Double] {
-        var size = 0
-        guard codes_get_size(h, "values", &size) == 0 else {
-            throw EccodesError.cannotGetData
-        }
+        var size = try getSize(of: "values")
         
         var data = try [Double](unsafeUninitializedCapacity: size) { buffer, initializedCount in
             guard codes_get_double_array(h, "values", buffer.baseAddress, &size) == 0 else {
@@ -267,14 +257,10 @@ public final class GribMessage {
     
     /// Get bitmap for information if a value is set
     public func getBitmap() throws -> [Int]? {
-        var bitmapPresent = 0
-        guard codes_get_long(h, "bitmapPresent", &bitmapPresent) == 0, bitmapPresent == 1 else {
+        guard let bitmapPresent = getLong(attribute: "bitmapPresent"), bitmapPresent == 1 else {
             return nil
         }
-        var size = 0
-        guard codes_get_size(h, "bitmap", &size) == 0 else {
-            fatalError("Could not get bitmap length")
-        }
+        var size = try getSize(of: "bitmap")
         return try [Int](unsafeUninitializedCapacity: size) { buffer, initializedCount in
             guard codes_get_long_array(h, "bitmap", buffer.baseAddress, &size) == 0 else {
                 throw EccodesError.cannotGetData
@@ -285,10 +271,7 @@ public final class GribMessage {
     
     /// Read data as `Int` array
     public func getLong() throws -> [Int] {
-        var size = 0
-        guard codes_get_size(h, "values", &size) == 0 else {
-            throw EccodesError.cannotGetData
-        }
+        var size = try getSize(of: "values")
         
         return try [Int](unsafeUninitializedCapacity: size) { buffer, initializedCount in
             guard codes_get_long_array(h, "values", buffer.baseAddress, &size) == 0 else {
@@ -296,6 +279,15 @@ public final class GribMessage {
             }
             initializedCount += size
         }
+    }
+    
+    /// Get a number of elements of an encoded array.
+    public func getSize(of key: String) throws -> Int {
+        var size = 0
+        guard codes_get_size(h, key, &size) == 0 else {
+            throw EccodesError.cannotGetData
+        }
+        return size
     }
     
     /// Get a single attribute. E.g. `name`, `Ni` or `Nj`

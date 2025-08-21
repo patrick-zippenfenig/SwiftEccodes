@@ -73,6 +73,7 @@ final class SwiftEccodesTests: XCTestCase {
         XCTAssertEqual(message.get(attribute: "shortName"), "soilw")
         XCTAssertEqual(message.getLong(attribute: "parameterCategory"), 0)
         XCTAssertEqual(message.getLong(attribute: "parameterNumber"), 192)
+        XCTAssertEqual(try message.getSize(of: "values"), 72960)
     }
     
     func testIterateCoordinates() throws {
