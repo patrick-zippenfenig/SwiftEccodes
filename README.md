@@ -10,7 +10,7 @@ Add `SwiftEccodes` as a dependency to your `Package.swift`
 
 ```swift
   dependencies: [
-    .package(url: "https://github.com/patrick-zippenfenig/SwiftEccodes.git", from: "0.0.0")
+    .package(url: "https://github.com/patrick-zippenfenig/SwiftEccodes.git", from: "1.0.0")
   ],
   targets: [
     .target(name: "MyApp", dependencies: [
