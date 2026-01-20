@@ -1,4 +1,4 @@
-@_implementationOnly import CEccodes
+import CEccodes
 import Foundation
 
 
@@ -21,25 +21,37 @@ public enum EccodesNamespace: String {
     case all = ""
 }
 
+
 /// Contains function to read grib messages
 public struct SwiftEccodes {
     /// Eccodes grib context might not be thread safe.
-    private static let gribContextLock = Lock()
+    fileprivate static let gribContextLock = Lock()
     
     /// Open a file and return all messages. Load the entire file into memory.
     public static func getMessages(fileName: String, multiSupport: Bool) throws -> [GribMessage] {
-        var messages = [GribMessage]()
-        try iterateMessages(fileName: fileName, multiSupport: multiSupport) {
-            messages.append($0)
+        guard let fileHandle = FileHandle(forReadingAtPath: fileName) else {
+            throw EccodesError.cannotOpenFile(filename: fileName)
         }
-        return messages
+        return try Self.getMessages(fileHandle: fileHandle, multiSupport: multiSupport)
+
     }
     
     /// Return all messages. Load the entire file into memory.
     public static func getMessages(fileHandle: FileHandle, multiSupport: Bool) throws -> [GribMessage] {
+        let c = getContext(multiSupport: multiSupport)
+        let fn = fdopen(dup(fileHandle.fileDescriptor), "r")
+        defer { fclose(fn) }
+        
         var messages = [GribMessage]()
-        try iterateMessages(fileHandle: fileHandle, multiSupport: multiSupport) {
-            messages.append($0)
+        while true {
+            var error: Int32 = 0
+            guard let h = gribContextLock.withLock({ codes_handle_new_from_file(c, fn, PRODUCT_GRIB, &error) }) else {
+                guard error == 0 else {
+                    throw EccodesError.newFromFileFailed(error: error)
+                }
+                break
+            }
+            messages.append(try GribMessage(h: h))
         }
         return messages
     }
@@ -47,60 +59,17 @@ public struct SwiftEccodes {
     /// Read all messages from memory. Memory must not be freed until all messages have been consumed.
     /// The message will be copied as soon as a modification is needed. In practice, memory copy is very likely.
     public static func getMessages(memory: UnsafeRawBufferPointer, multiSupport: Bool) throws -> [GribMessage] {
+        let c = gribContextLock.withLock {
+            let c = grib_context_get_default()
+            if multiSupport {
+                codes_grib_multi_support_on(c)
+            } else {
+                codes_grib_multi_support_off(c)
+            }
+            return c
+        }
+        
         var messages = [GribMessage]()
-        try iterateMessages(memory: memory, multiSupport: multiSupport) {
-            messages.append($0)
-        }
-        return messages
-    }
-    
-    /// Open a file and iterate all messages. All messages copy the required data into memory and the file does not need to stay open.
-    public static func iterateMessages(fileName: String, multiSupport: Bool, callback: (GribMessage) throws -> ()) throws {
-        guard let filehandle = FileHandle(forReadingAtPath: fileName) else {
-            throw EccodesError.cannotOpenFile(filename: fileName)
-        }
-        try iterateMessages(fileHandle: filehandle, multiSupport: multiSupport, callback: callback)
-    }
-    
-    /// Itterate all message from a given `FileHandle`. All messages copy the required data into memory and the file does not need to stay open.
-    public static func iterateMessages(fileHandle: FileHandle, multiSupport: Bool, callback: (GribMessage) throws -> ()) throws {
-        let c = gribContextLock.withLock {
-            let c = grib_context_get_default()
-            if multiSupport {
-                codes_grib_multi_support_on(c)
-            } else {
-                codes_grib_multi_support_off(c)
-            }
-            return c
-        }
-        
-        let fn = fdopen(fileHandle.fileDescriptor, "r")
-        
-        while true {
-            var error: Int32 = 0
-            guard let h = gribContextLock.withLock({ codes_handle_new_from_file(c, fn, PRODUCT_GRIB, &error) }) else {
-                guard error == 0 else {
-                    throw EccodesError.newFromFileFailed(error: error)
-                }
-                return
-            }
-            try callback(try GribMessage(h: h))
-        }
-    }
-    
-    /// Iterate message from memory. Memory must not be freed until all messages have been consumed.
-    /// The message will be copied as soon as a modification is needed. In practice, memory copy is very likely.
-    public static func iterateMessages(memory: UnsafeRawBufferPointer, multiSupport: Bool = true, callback: (GribMessage) throws -> ()) throws {
-        let c = gribContextLock.withLock {
-            let c = grib_context_get_default()
-            if multiSupport {
-                codes_grib_multi_support_on(c)
-            } else {
-                codes_grib_multi_support_off(c)
-            }
-            return c
-        }
-        
         var length = memory.count
         var ptrs = UnsafeMutableRawPointer(mutating: memory.baseAddress)
         while true {
@@ -109,10 +78,21 @@ public struct SwiftEccodes {
                 guard error == 0 else {
                     throw EccodesError.newFromMultiMessageFailed(error: error)
                 }
-                return
+                break
             }
-            try callback(try GribMessage(h: h))
+            messages.append(try GribMessage(h: h))
         }
+        return messages
+    }
+    
+    /// Open a file and iterate all messages in an AsyncSequence. The async sequence is used for error propagation. No async IO takes place.
+    public static func iterateMessages(fileName: String, multiSupport: Bool) throws(EccodesError) -> GribFileAsyncSequence {
+        return try GribFileAsyncSequence(fileName: fileName, multiSupport: multiSupport)
+    }
+    
+    /// Open a file and iterate all messages in an AsyncSequence. The async sequence is used for error propagation.
+    public static func iterateMessages(memory: UnsafeRawBufferPointer, multiSupport: Bool) throws(EccodesError) -> GribMemoryAsyncSequence {
+        return GribMemoryAsyncSequence(memory: memory, multiSupport: multiSupport)
     }
     
     /// Detect a range of bytes in a byte stream if there is a grib header and returns it
@@ -155,13 +135,120 @@ public struct SwiftEccodes {
         }
         return (offset, Int(length))
     }
+    
+    static func getContext(multiSupport: Bool) -> OpaquePointer? {
+        return gribContextLock.withLock {
+            let c = grib_context_get_default()
+            if multiSupport {
+                codes_grib_multi_support_on(c)
+            } else {
+                codes_grib_multi_support_off(c)
+            }
+            return c
+        }
+    }
+}
+
+/// Async sequence to iterate over GRIB messages in a file
+public struct GribFileAsyncSequence: AsyncSequence {
+    let multiSupport: Bool
+    let fileHandle: FileHandle
+    
+    public init(fileName: String, multiSupport: Bool) throws(EccodesError) {
+        guard let fh = FileHandle(forReadingAtPath: fileName) else {
+            throw EccodesError.cannotOpenFile(filename: fileName)
+        }
+        self.fileHandle = fh
+        self.multiSupport = multiSupport
+    }
+    
+    public class AsyncIterator: AsyncIteratorProtocol {
+        let context: OpaquePointer?
+        var fn: UnsafeMutablePointer<FILE>? = nil
+
+        init(fileHandle: FileHandle, multiSupport: Bool) {
+            /// Duplicate file descriptor, because `fclose` would close the fileHandle leading to double free
+            self.fn = fdopen(dup(fileHandle.fileDescriptor), "r")
+            context = SwiftEccodes.getContext(multiSupport: multiSupport)
+        }
+
+        public func next() async throws(EccodesError) -> GribMessage? {
+            guard let fn else {
+                return nil
+            }
+            var error: Int32 = 0
+            guard let h = SwiftEccodes.gribContextLock.withLock({ codes_handle_new_from_file(context, fn, PRODUCT_GRIB, &error) }) else {
+                guard error == 0 else {
+                    throw EccodesError.newFromFileFailed(error: error)
+                }
+                fclose(fn)
+                self.fn = nil
+                return nil
+            }
+            return try GribMessage(h: h)
+        }
+        
+        deinit {
+            if let fn {
+                fclose(fn)
+                self.fn = nil
+            }
+        }
+    }
+
+    public func makeAsyncIterator() -> AsyncIterator {
+        return AsyncIterator(fileHandle: fileHandle, multiSupport: multiSupport)
+    }
+}
+
+
+/// Async sequence to iterate over GRIB messages in a memory region
+public struct GribMemoryAsyncSequence: AsyncSequence, @unchecked Sendable {
+    let memory: UnsafeRawBufferPointer
+    let multiSupport: Bool
+    
+    public init(memory: UnsafeRawBufferPointer, multiSupport: Bool){
+        self.memory = memory
+        self.multiSupport = multiSupport
+    }
+    
+    public struct AsyncIterator: AsyncIteratorProtocol {
+        let context: OpaquePointer?
+        var length: Int
+        var memory: UnsafeMutableRawPointer?
+
+        init(memory: UnsafeRawBufferPointer, multiSupport: Bool) {
+            self.memory = UnsafeMutableRawPointer(mutating: memory.baseAddress)
+            self.length = memory.count
+            context = SwiftEccodes.getContext(multiSupport: multiSupport)
+        }
+
+        mutating public func next() async throws(EccodesError) -> GribMessage? {
+            guard memory != nil else {
+                return nil
+            }
+            var error: Int32 = 0
+            guard let h = SwiftEccodes.gribContextLock.withLock({ codes_grib_handle_new_from_multi_message(context, &memory, &length, &error) }) else {
+                guard error == 0 else {
+                    throw EccodesError.newFromMultiMessageFailed(error: error)
+                }
+                memory = nil
+                return nil
+            }
+            return try GribMessage(h: h)
+        }
+    }
+
+    public func makeAsyncIterator() -> AsyncIterator {
+        return AsyncIterator(memory: memory, multiSupport: multiSupport)
+    }
 }
 
 /// Represent a GRIB message. Frees memory at release.
 public final class GribMessage {
     let h: OpaquePointer
     
-    init(h: OpaquePointer) throws {
+    init(h: OpaquePointer) throws(EccodesError) {
         guard grib_is_defined(h, "7777") == 1 else {
             codes_handle_delete(h)
             throw EccodesError.invalidGribFileTrailingMessage7777IsMissing
