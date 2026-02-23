@@ -39,7 +39,7 @@ public struct SwiftEccodes {
     /// Return all messages. Load the entire file into memory.
     public static func getMessages(fileHandle: FileHandle, multiSupport: Bool) throws -> [GribMessage] {
         let c = getContext(multiSupport: multiSupport)
-        let fn:  UnsafeMutablePointer<FILE>! = fdopen(dup(fileHandle.fileDescriptor), "r")
+        let fn: UnsafeMutablePointer<FILE>! = fdopen(dup(fileHandle.fileDescriptor), "r")
         defer { fclose(fn) }
         
         var messages = [GribMessage]()
